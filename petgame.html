@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Virtual Pet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevents scrollbars from appearing */
+        }
+        #loading-overlay, #name-overlay, #game-over-overlay, #travel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.3s ease-in-out;
+        }
+        #loading-overlay {
+            background-color: rgba(17, 24, 39, 1); /* bg-gray-900 */
+            pointer-events: none; /* Allow clicks through when invisible */
+        }
+         #name-overlay, #game-over-overlay, #travel-overlay {
+            background-color: rgba(17, 24, 39, 0.8); /* bg-gray-900 with opacity */
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .ui-panel {
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .progress-bar-container {
+            background-color: #e0e0e0;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="opacity-0">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-4"></div>
+            <p>Loading New Scene...</p>
+        </div>
+    </div>
+
+    <!-- Naming Modal -->
+    <div id="name-overlay">
+        <div class="ui-panel text-gray-800 rounded-xl p-6 shadow-lg text-center w-11/12 max-w-sm">
+            <h2 class="text-2xl font-bold mb-4">Name Your Pet!</h2>
+            <input type="text" id="pet-name-input" class="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4 text-center" placeholder="Enter a name">
+            <button id="save-name-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition-all">Save Name</button>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="game-over-overlay" class="hidden opacity-0 pointer-events-none">
+        <div class="ui-panel text-gray-800 rounded-xl p-8 shadow-lg text-center w-11/12 max-w-sm">
+            <h2 class="text-3xl font-bold mb-2 text-red-600">Game Over!</h2>
+            <p class="mb-6">Your pet became too sad or hungry.</p>
+            <button id="restart-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-all">Play Again</button>
+        </div>
+    </div>
+
+    <!-- Travel Modal -->
+    <div id="travel-overlay" class="hidden opacity-0 pointer-events-none">
+        <!-- This is now empty, the contents have been moved to the dropdown -->
+    </div>
+
+
+    <!-- This canvas is where your Spline scene will be rendered -->
+    <canvas id="canvas3d" class="absolute top-0 left-0 w-full h-full"></canvas>
+
+    <!-- Status Message for Errors -->
+    <div id="status-message" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ui-panel text-red-600 font-bold p-4 rounded-lg shadow-lg text-center">
+        <!-- Error messages will go here -->
+    </div>
+
+    <!-- UI Panels -->
+    <div class="absolute top-0 left-0 p-4 sm:p-6 w-full flex flex-col sm:flex-row justify-between items-start pointer-events-none">
+        
+        <!-- Top Left Panel: Pet Name -->
+        <div class="ui-panel text-gray-800 rounded-xl p-4 shadow-lg max-w-xs pointer-events-auto">
+            <h1 id="pet-name-display" class="text-2xl font-bold">My Pet</h1>
+        </div>
+        
+        <!-- Top Right Panel Group (Travel Button) -->
+        <div class="relative pointer-events-auto mt-4 sm:mt-0">
+             <button id="travel-button" class="ui-panel p-3 rounded-full text-gray-800 shadow-lg hover:bg-gray-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>
+             </button>
+             <!-- Dropdown Menu -->
+             <div id="travel-menu" class="hidden absolute top-full right-0 mt-2 w-48 ui-panel text-gray-800 rounded-xl p-2 shadow-lg">
+                 <div class="flex flex-col space-y-1">
+                    <button id="home-scene-button" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-all w-full">Home</button>
+                    <button id="drive-scene-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-all w-full">Drive</button>
+                    <button id="island-scene-button" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition-all w-full">Go to Island</button>
+                </div>
+             </div>
+        </div>
+
+    </div>
+
+    <!-- Bottom UI Section -->
+    <div class="absolute bottom-0 left-0 w-full p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-end pointer-events-none">
+        
+        <!-- Bottom Left Panel: Pet Stats -->
+        <div class="ui-panel text-gray-800 rounded-xl p-4 shadow-lg w-full sm:w-auto sm:max-w-xs pointer-events-auto mb-4 sm:mb-0 flex flex-col space-y-3">
+            <div>
+                 <p class="text-lg">Mood: <span id="pet-mood" class="font-semibold">Happy</span></p>
+            </div>
+            <div>
+                <label class="font-semibold text-sm">Happiness</label>
+                <div class="progress-bar-container w-full h-4 mt-1">
+                    <div id="happiness-bar" class="progress-bar bg-green-500" style="width: 100%;"></div>
+                </div>
+            </div>
+            <div>
+                <label class="font-semibold text-sm">Hunger</label>
+                <div class="progress-bar-container w-full h-4 mt-1">
+                    <div id="hunger-bar" class="progress-bar bg-yellow-500" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interaction Buttons (Bottom Right) -->
+        <div class="flex space-x-4 pointer-events-auto self-center sm:self-end">
+            
+        </div>
+    </div>
+
+    <!-- Import Spline Viewer -->
+    <script type="module">
+        import { Application } from 'https://unpkg.com/@splinetool/runtime@1.7.0/build/runtime.js';
+
+        // --- 1. SETUP ---
+        const canvas = document.getElementById('canvas3d');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const happinessBar = document.getElementById('happiness-bar');
+        const hungerBar = document.getElementById('hunger-bar');
+        const petMoodEl = document.getElementById('pet-mood');
+        
+        // Scene buttons are now inside the travel modal
+        const homeSceneButton = document.getElementById('home-scene-button');
+        const driveSceneButton = document.getElementById('drive-scene-button');
+        const islandSceneButton = document.getElementById('island-scene-button');
+        const statusMessage = document.getElementById('status-message');
+        
+        // Naming feature elements
+        const nameOverlay = document.getElementById('name-overlay');
+        const petNameInput = document.getElementById('pet-name-input');
+        const saveNameButton = document.getElementById('save-name-button');
+        const petNameDisplay = document.getElementById('pet-name-display');
+
+        // Game Over elements
+        const gameOverOverlay = document.getElementById('game-over-overlay');
+        const restartButton = document.getElementById('restart-button');
+        
+        // Travel Dropdown elements
+        const travelMenu = document.getElementById('travel-menu');
+        const travelButton = document.getElementById('travel-button');
+
+
+        const spline = new Application(canvas);
+
+        // --- 2. SCENE MANAGEMENT ---
+        const scenes = {
+            home: 'https://prod.spline.design/liU9Z6h-noiCn0N2/scene.splinecode',
+            drive: 'https://prod.spline.design/fdf2kafi3tbdATeg/scene.splinecode',
+            island: 'https://prod.spline.design/Htfl6fMXftatElO3/scene.splinecode'
+        };
+        let currentScene = '';
+
+        function loadScene(sceneUrl, sceneName, onLoadedCallback) {
+            currentScene = sceneName;
+            loadingOverlay.style.pointerEvents = 'auto';
+            loadingOverlay.style.opacity = '1';
+
+            spline.load(sceneUrl)
+                .then(() => {
+                    loadingOverlay.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingOverlay.style.pointerEvents = 'none';
+                    }, 500);
+                    
+                    if(onLoadedCallback) {
+                        onLoadedCallback();
+                    }
+                });
+        }
+        
+        function setupSceneButtons() {
+            // Scene buttons are in the travel modal
+            homeSceneButton.addEventListener('click', () => {
+                travelMenu.classList.add('hidden');
+                loadScene(scenes.home, 'home', setupInSceneClickListener);
+            });
+            driveSceneButton.addEventListener('click', () => {
+                travelMenu.classList.add('hidden');
+                loadScene(scenes.drive, 'drive');
+            });
+            islandSceneButton.addEventListener('click', () => {
+                travelMenu.classList.add('hidden');
+                loadScene(scenes.island, 'island');
+            });
+
+            // Main travel button to open/close the dropdown
+            travelButton.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevents the window click listener from closing it immediately
+                travelMenu.classList.toggle('hidden');
+            });
+        }
+        
+        // Close dropdown when clicking outside of it
+        window.addEventListener('click', () => {
+            if (!travelMenu.classList.contains('hidden')) {
+                travelMenu.classList.add('hidden');
+            }
+        });
+
+        // --- 3. IN-SCENE CLICK HANDLING ---
+        function setupInSceneClickListener() {
+            spline.addEventListener('mouseDown', (e) => {
+                if (e.target && e.target.name === 'Car') {
+                    loadScene(scenes.drive, 'drive');
+                }
+            });
+        }
+
+
+        // --- 4. PET STATE MANAGEMENT ---
+        let pet = {
+            name: 'My Pet',
+            happiness: 100,
+            hunger: 100,
+            mood: 'Happy'
+        };
+        const MAX_STAT = 100;
+
+        function updateUI() {
+            petNameDisplay.textContent = pet.name;
+            happinessBar.style.width = `${pet.happiness}%`;
+            hungerBar.style.width = `${pet.hunger}%`;
+            petMoodEl.textContent = pet.mood;
+
+            happinessBar.classList.toggle('bg-red-500', pet.happiness < 30);
+            happinessBar.classList.toggle('bg-green-500', pet.happiness >= 30);
+            hungerBar.classList.toggle('bg-red-500', pet.hunger < 30);
+            hungerBar.classList.toggle('bg-yellow-500', pet.hunger >= 30);
+        }
+
+        function updateMood() {
+            if (pet.hunger <= 0 || pet.happiness <= 0) {
+                pet.mood = 'Game Over';
+                return;
+            }
+            if (pet.hunger < 30 && pet.happiness < 30) {
+                pet.mood = 'Very Sad & Hungry';
+            } else if (pet.hunger < 30) {
+                pet.mood = 'Hungry!';
+            } else if (pet.happiness < 30) {
+                pet.mood = 'Sad';
+            } else if (pet.happiness > 80 && pet.hunger > 80) {
+                pet.mood = 'Joyful!';
+            } else {
+                pet.mood = 'Content';
+            }
+        }
+
+        // --- 5. PET INTERACTIONS ---
+        
+        saveNameButton.addEventListener('click', () => {
+            const newName = petNameInput.value.trim();
+            if (newName) {
+                pet.name = newName;
+                updateUI();
+                nameOverlay.style.display = 'none';
+            }
+        });
+        
+        function updateAll() {
+            updateMood();
+            updateUI();
+        }
+
+        // --- 6. GAME LOOP & GAME OVER LOGIC ---
+        let gameLoopInterval = null;
+
+        function gameLoop() {
+            switch (currentScene) {
+                case 'drive':
+                    pet.happiness = Math.min(MAX_STAT, pet.happiness + 1); // Happiness increases
+                    pet.hunger = Math.max(0, pet.hunger - 1); // Hunger still decreases
+                    break;
+                case 'island':
+                    pet.hunger = Math.min(MAX_STAT, pet.hunger + 2); // Hunger fills up
+                    pet.happiness = Math.max(0, pet.happiness - 1); // Happiness still decreases
+                    break;
+                default: // 'home' or any other scene
+                    pet.happiness = Math.max(0, pet.happiness - 1);
+                    pet.hunger = Math.max(0, pet.hunger - 2);
+                    break;
+            }
+            
+            updateAll();
+
+            if (pet.happiness <= 0 || pet.hunger <= 0) {
+                gameOver();
+            }
+        }
+
+        function gameOver() {
+            clearInterval(gameLoopInterval);
+            gameOverOverlay.classList.remove('hidden');
+            gameOverOverlay.style.opacity = '1';
+            gameOverOverlay.style.pointerEvents = 'auto';
+        }
+
+        function restartGame() {
+            gameOverOverlay.style.opacity = '0';
+            gameOverOverlay.style.pointerEvents = 'none';
+            setTimeout(() => {
+                gameOverOverlay.classList.add('hidden');
+            }, 500);
+
+            pet.happiness = 100;
+            pet.hunger = 100;
+            
+            initialize();
+        }
+
+        // --- 7. INITIALIZE THE GAME ---
+        function initialize() {
+            if (gameLoopInterval) clearInterval(gameLoopInterval);
+
+            setupSceneButtons();
+            
+            loadScene(scenes.home, 'home', setupInSceneClickListener);
+            
+            gameLoopInterval = setInterval(gameLoop, 2000);
+            updateAll();
+        }
+        
+        restartButton.addEventListener('click', restartGame);
+
+        // Start everything!
+        initialize();
+    </script>
+</body>
+</html>
+
